@@ -1,0 +1,11 @@
+# Smart Bus Monitor — Python Dependencies
+# Install: pip install -r requirements_bridge.txt
+
+paho-mqtt>=2.0.0        # MQTT client (both scripts)
+websockets>=12.0        # WebSocket server (mqtt_bridge.py)
+numpy>=1.24.0           # Feature extraction + ML
+scikit-learn>=1.3.0     # ML pipeline (scaler, selector, LR meta-learner)
+xgboost>=2.0.0          # Stacking ensemble base learner
+lightgbm>=4.0.0         # Stacking ensemble base learner
+imbalanced-learn>=0.11.0
+scipy>=1.11.0

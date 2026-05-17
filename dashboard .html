@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart Bus Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg: #07090f;
+      --surf: #0c1018;
+      --card: #111820;
+      --brd: #1c2535;
+      --brd2: #243045;
+      --cyan: #00d4ff;
+      --cyan2: #7ee8ff;
+      --green: #00e676;
+      --amber: #ffab00;
+      --red: #ff3d57;
+      --purple: #ae6ef5;
+      --text: #c8d8ee;
+      --sub: #4a5e7a;
+      --mono: 'Space Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+      --r: 6px;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px
+    }
+
+    ::-webkit-scrollbar {
+      width: 3px
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--brd2);
+      border-radius: 2px
+    }
+
+    /* ── Layout ── */
+    .shell {
+      display: grid;
+      height: 100vh;
+      grid-template-rows: 46px 1fr;
+      grid-template-columns: 240px 1fr 256px;
+      grid-template-areas: "hd hd hd" "lp mp rp";
+    }
+
+    /* ── Header ── */
+    header {
+      grid-area: hd;
+      background: var(--surf);
+      border-bottom: 1px solid var(--brd);
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-right: 1px solid var(--brd);
+      height: 100%;
+      flex-shrink: 0;
+    }
+
+    .logo-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan);
+      flex-shrink: 0;
+      box-shadow: 0 0 0 0 rgba(0, 212, 255, .6);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(0, 212, 255, .6)
+      }
+
+      70% {
+        box-shadow: 0 0 0 8px rgba(0, 212, 255, 0)
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(0, 212, 255, 0)
+      }
+    }
+
+    .logo-text {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: .12em;
+      line-height: 1.2
+    }
+
+    .logo-sub {
+      font-size: 8px;
+      color: var(--sub);
+      letter-spacing: .06em
+    }
+
+    .hd-stats {
+      display: flex;
+      flex: 1;
+      height: 100%
+    }
+
+    .hs {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 16px;
+      border-right: 1px solid var(--brd);
+      gap: 1px;
+    }
+
+    .hs-l {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: .14em;
+      color: var(--sub)
+    }
+
+    .hs-v {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700
+    }
+
+    .ws-pill {
+      margin-left: auto;
+      margin-right: 14px;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+      letter-spacing: .06em;
+      border: 1px solid var(--brd2);
+      color: var(--sub);
+      transition: all .4s;
+    }
+
+    .ws-pill.live {
+      color: var(--green);
+      border-color: rgba(0, 230, 118, .3);
+      box-shadow: 0 0 12px rgba(0, 230, 118, .12)
+    }
+
+    .ws-pill.demo {
+      color: var(--amber);
+      border-color: rgba(255, 171, 0, .3)
+    }
+
+    /* ── Panels ── */
+    .panel {
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px
+    }
+
+    .panel-l {
+      grid-area: lp;
+      background: var(--surf);
+      border-right: 1px solid var(--brd)
+    }
+
+    .panel-r {
+      grid-area: rp;
+      background: var(--surf);
+      border-left: 1px solid var(--brd)
+    }
+
+    #map-wrap {
+      grid-area: mp;
+      position: relative
+    }
+
+    #map {
+      width: 100%;
+      height: 100%
+    }
+
+    .leaflet-container {
+      background: #05080f !important
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--brd);
+      border-radius: var(--r);
+      padding: 10px 11px;
+    }
+
+    .ctitle {
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      color: var(--sub);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ctitle-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0
+    }
+
+    /* ── Rows ── */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--brd)
+    }
+
+    .row:last-child {
+      border-bottom: none
+    }
+
+    .row-l {
+      font-size: 11px;
+      color: var(--sub)
+    }
+
+    .row-v {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right
+    }
+
+    /* ── Badges ── */
+    .badge {
+      font-family: var(--mono);
+      font-size: 8px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 3px;
+      letter-spacing: .08em;
+    }
+
+    .b-ok {
+      background: rgba(0, 230, 118, .12);
+      color: var(--green);
+      border: 1px solid rgba(0, 230, 118, .25)
+    }
+
+    .b-err {
+      background: rgba(255, 61, 87, .12);
+      color: var(--red);
+      border: 1px solid rgba(255, 61, 87, .25)
+    }
+
+    .b-warn {
+      background: rgba(255, 171, 0, .12);
+      color: var(--amber);
+      border: 1px solid rgba(255, 171, 0, .25)
+    }
+
+    .b-info {
+      background: rgba(0, 212, 255, .10);
+      color: var(--cyan);
+      border: 1px solid rgba(0, 212, 255, .2)
+    }
+
+    .b-ml {
+      background: rgba(174, 110, 245, .12);
+      color: var(--purple);
+      border: 1px solid rgba(174, 110, 245, .25)
+    }
+
+    /* ── Bar ── */
+    .bar-bg {
+      background: var(--brd);
+      border-radius: 3px;
+      height: 5px;
+      margin-top: 6px;
+      overflow: hidden
+    }
+
+    .bar-fg {
+      height: 100%;
+      border-radius: 3px;
+      transition: width .5s ease, background .5s
+    }
+
+    /* ── IMU grid ── */
+    .imu-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 5px;
+      margin-top: 2px
+    }
+
+    .imu-cell {
+      background: var(--bg);
+      border: 1px solid var(--brd);
+      border-radius: 4px;
+      padding: 6px 7px;
+      text-align: center;
+    }
+
+    .imu-lbl {
+      font-size: 8px;
+      color: var(--sub);
+      letter-spacing: .1em
+    }
+
+    .imu-val {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 2px
+    }
+
+    /* ── Alert feed ── */
+    .al-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--brd);
+    }
+
+    .al-item:last-child {
+      border-bottom: none
+    }
+
+    .al-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0
+    }
+
+    .al-type {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .08em
+    }
+
+    .al-msg {
+      font-size: 10px;
+      color: var(--sub);
+      margin-top: 1px;
+      line-height: 1.3
+    }
+
+    .al-time {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--sub);
+      margin-left: auto;
+      flex-shrink: 0;
+      padding-left: 8px
+    }
+
+    /* ── Sensor health ── */
+    .sh-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px
+    }
+
+    .sh-cell {
+      background: var(--bg);
+      border: 1px solid var(--brd);
+      border-radius: 4px;
+      padding: 6px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sh-lbl {
+      font-size: 9px;
+      color: var(--sub)
+    }
+
+    .sh-val {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700
+    }
+
+    /* ── Geofence rows ── */
+    .geo-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--brd)
+    }
+
+    .geo-row:last-child {
+      border-bottom: none
+    }
+
+    .geo-name {
+      font-family: var(--mono);
+      font-size: 10px
+    }
+
+    .geo-dist {
+      font-size: 10px;
+      color: var(--sub);
+      margin-top: 1px
+    }
+
+    /* ── Map overlay chip ── */
+    .map-chip {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(7, 9, 15, .85);
+      border: 1px solid var(--brd2);
+      backdrop-filter: blur(8px);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--cyan2);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .map-top {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+    }
+
+    .map-badge {
+      background: rgba(7, 9, 15, .85);
+      border: 1px solid var(--brd2);
+      backdrop-filter: blur(8px);
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+
+    <!-- ══ HEADER ══ -->
+    <header>
+      <div class="logo">
+        <div class="logo-dot"></div>
+        <div>
+          <div class="logo-text">SMART BUS MONITOR</div>
+          <div class="logo-sub">ESP32 · GPS · IMU · ML</div>
+        </div>
+      </div>
+      <div class="hd-stats">
+        <div class="hs">
+          <div class="hs-l">Speed</div>
+          <div class="hs-v" id="h-spd" style="color:var(--cyan)">0.0 km/h</div>
+        </div>
+        <div class="hs">
+          <div class="hs-l">ML Risk</div>
+          <div class="hs-v" id="h-ml" style="color:var(--purple)">0.0000</div>
+        </div>
+        <div class="hs">
+          <div class="hs-l">Alerts</div>
+          <div class="hs-v" id="h-al" style="color:var(--amber)">0</div>
+        </div>
+        <div class="hs">
+          <div class="hs-l">Uptime</div>
+          <div class="hs-v" id="h-up" style="color:var(--sub)">00:00</div>
+        </div>
+        <div class="hs">
+          <div class="hs-l">DB Rows</div>
+          <div class="hs-v" id="h-db" style="color:var(--sub)">0</div>
+        </div>
+      </div>
+      <div id="ws-badge" class="ws-pill">● CONNECTING</div>
+    </header>
+
+    <!-- ══ LEFT PANEL ══ -->
+    <div class="panel panel-l">
+
+      <!-- GPS -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--cyan)"></div>
+          GPS · Location
+        </div>
+        <div class="row"><span class="row-l">Latitude</span> <span class="row-v" id="g-lat">—</span></div>
+        <div class="row"><span class="row-l">Longitude</span> <span class="row-v" id="g-lon">—</span></div>
+        <div class="row"><span class="row-l">Speed</span> <span class="row-v" id="g-spd">—</span></div>
+        <div class="row"><span class="row-l">HDOP</span> <span class="row-v" id="g-hdop">—</span></div>
+        <div class="row"><span class="row-l">Satellites</span><span class="row-v" id="g-sats">—</span></div>
+        <div class="row"><span class="row-l">Zone</span> <span class="row-v" id="g-zone">—</span></div>
+        <div class="row"><span class="row-l">Route</span> <span id="g-dev" class="badge b-info">WAIT</span></div>
+      </div>
+
+      <!-- Route Deviation -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--amber)"></div>
+          Route Deviation
+        </div>
+        <div class="row"><span class="row-l">Distance</span> <span class="row-v" id="d-dist">0 m</span></div>
+        <div class="row"><span class="row-l">Threshold</span> <span class="row-v" id="d-thr">120 m</span></div>
+        <div class="row"><span class="row-l">Status</span> <span id="d-stat" class="badge b-ok">CLEAR</span></div>
+        <div class="bar-bg">
+          <div class="bar-fg" id="d-bar" style="width:0%;background:var(--green)"></div>
+        </div>
+      </div>
+
+      <!-- Geofences -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--purple)"></div>
+          Geofence Zones
+        </div>
+        <div id="geo-list">
+          <div class="geo-row">
+            <div><span class="geo-name">Stop_A</span>
+              <div class="geo-dist">— m</div>
+            </div>
+            <span class="badge b-info">OUTSIDE</span>
+          </div>
+          <div class="geo-row">
+            <div><span class="geo-name">Stop_B</span>
+              <div class="geo-dist">— m</div>
+            </div>
+            <span class="badge b-info">OUTSIDE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sensor Health -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--green)"></div>
+          Sensor Health
+        </div>
+        <div class="sh-grid">
+          <div class="sh-cell"><span class="sh-lbl">GPS</span> <span class="sh-val" id="sh-gps"
+              style="color:var(--sub)">WAIT</span></div>
+          <div class="sh-cell"><span class="sh-lbl">IMU</span> <span class="sh-val" id="sh-imu"
+              style="color:var(--sub)">WAIT</span></div>
+          <div class="sh-cell"><span class="sh-lbl">Alcohol</span> <span class="sh-val" id="sh-alc"
+              style="color:var(--sub)">WAIT</span></div>
+          <div class="sh-cell"><span class="sh-lbl">Air</span> <span class="sh-val" id="sh-air"
+              style="color:var(--sub)">WAIT</span></div>
+          <div class="sh-cell"><span class="sh-lbl">GSM</span> <span class="sh-val" id="sh-gsm"
+              style="color:var(--sub)">WAIT</span></div>
+          <div class="sh-cell"><span class="sh-lbl">DB</span> <span class="sh-val" id="sh-db"
+              style="color:var(--sub)">READY</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══ MAP ══ -->
+    <div id="map-wrap">
+      <div id="map"></div>
+      <div class="map-chip" id="map-chip">9.09260, 76.48920 · 0.0 km/h</div>
+      <div class="map-top">
+        <div id="map-dev-badge" class="map-badge" style="color:var(--green)">● ON ROUTE</div>
+        <div id="map-ml-badge" class="map-badge" style="color:var(--purple)">ML: SAFE</div>
+      </div>
+    </div>
+
+    <!-- ══ RIGHT PANEL ══ -->
+    <div class="panel panel-r">
+
+      <!-- ML Rash Driving -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--purple)"></div>
+          ML · Rash Driving
+        </div>
+        <div class="row">
+          <span class="row-l">Probability</span>
+          <span class="row-v" id="ml-prob" style="color:var(--purple)">0.0000</span>
+        </div>
+        <div class="bar-bg">
+          <div class="bar-fg" id="ml-bar" style="width:0%;background:var(--green)"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <div style="font-size:9px;color:var(--sub)" id="ml-meta">buf 0/30</div>
+          <span id="ml-badge" class="badge b-ml">SAFE</span>
+        </div>
+      </div>
+
+      <!-- IMU -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--cyan)"></div>
+          IMU · MPU6050
+        </div>
+        <div class="imu-grid">
+          <div class="imu-cell">
+            <div class="imu-lbl">ACC X</div>
+            <div class="imu-val" id="i-ax">0.00</div>
+          </div>
+          <div class="imu-cell">
+            <div class="imu-lbl">ACC Y</div>
+            <div class="imu-val" id="i-ay">0.00</div>
+          </div>
+          <div class="imu-cell">
+            <div class="imu-lbl">ACC Z</div>
+            <div class="imu-val" id="i-az">1.00</div>
+          </div>
+          <div class="imu-cell">
+            <div class="imu-lbl">GYR X</div>
+            <div class="imu-val" id="i-gx">0.0</div>
+          </div>
+          <div class="imu-cell">
+            <div class="imu-lbl">GYR Y</div>
+            <div class="imu-val" id="i-gy">0.0</div>
+          </div>
+          <div class="imu-cell">
+            <div class="imu-lbl">GYR Z</div>
+            <div class="imu-val" id="i-gz">0.0</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="row-l">|Accel| mag</span>
+          <span class="row-v" id="i-mag" style="color:var(--cyan)">1.00 g</span>
+        </div>
+      </div>
+
+      <!-- Alcohol -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--amber)"></div>
+          MQ-3 · Alcohol
+        </div>
+        <div class="row"><span class="row-l">ADC Value</span> <span class="row-v" id="a-adc">—</span></div>
+        <div class="row"><span class="row-l">Threshold</span> <span class="row-v" style="color:var(--sub)">2500</span>
+        </div>
+        <div class="row"><span class="row-l">Status</span> <span id="a-stat" class="badge b-ok">CLEAR</span></div>
+        <div class="bar-bg">
+          <div class="bar-fg" id="a-bar" style="width:0%;background:var(--green)"></div>
+        </div>
+      </div>
+
+      <!-- Air Quality -->
+      <div class="card">
+        <div class="ctitle">
+          <div class="ctitle-dot" style="background:var(--green)"></div>
+          MQ-135 · Air Quality
+        </div>
+        <div class="row"><span class="row-l">ADC Value</span> <span class="row-v" id="e-aq">—</span></div>
+        <div class="row"><span class="row-l">Threshold</span> <span class="row-v" style="color:var(--sub)">3000</span>
+        </div>
+        <div class="row"><span class="row-l">Status</span> <span id="e-stat" class="badge b-ok">CLEAR</span></div>
+        <div class="bar-bg">
+          <div class="bar-fg" id="e-bar" style="width:0%;background:var(--green)"></div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div class="card" style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+        <div class="ctitle" style="margin-bottom:6px">
+          <div class="ctitle-dot" style="background:var(--red)"></div>
+          Alert Feed
+          <span id="al-cnt" class="badge b-err" style="margin-left:auto">0</span>
+        </div>
+        <div id="al-feed" style="overflow-y:auto;flex:1">
+          <div style="color:var(--sub);font-size:11px;padding:8px 0">No alerts yet</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ── Route waypoints (matches bridge.py & gps_chip.c) ─────────
+    const ROUTE = [
+      [9.092600, 76.489200], [9.092750, 76.489350], [9.092900, 76.489500],
+      [9.093100, 76.489680], [9.093300, 76.489850], [9.093500, 76.490020],
+      [9.093650, 76.490180], [9.093800, 76.490340], [9.093950, 76.490500],
+      [9.094100, 76.490660], [9.094300, 76.490820], [9.094500, 76.490980],
+      [9.094700, 76.491140], [9.094900, 76.491300], [9.095100, 76.491460],
+      [9.095300, 76.491620],
+    ];
+
+    const ZONES = [
+      { name: "Stop_A", lat: 9.092600, lon: 76.489200, r: 80 },
+      { name: "Stop_B", lat: 9.095300, lon: 76.491620, r: 80 },
+    ];
+
+    // ── Severity colors ───────────────────────────────────────────
+    const SEV = {
+      CRITICAL: 'var(--red)',
+      HIGH: 'var(--amber)',
+      MEDIUM: 'var(--amber)',
+      INFO: 'var(--cyan)',
+      LOW: 'var(--sub)',
+    };
+
+    // ── Map ───────────────────────────────────────────────────────
+    const map = L.map('map', {
+      center: [9.09390, 76.49040],
+      zoom: 16,
+      zoomControl: true,
+      attributionControl: false,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 20
+    }).addTo(map);
+
+    // Pre-defined route line
+    const routeLine = L.polyline(ROUTE, {
+      color: '#00d4ff', weight: 3, opacity: .55,
+      dashArray: '6 6'
+    }).addTo(map);
+
+    // Route start/end markers
+    const markerIcon = (color, label) => L.divIcon({
+      className: '',
+      html: `<div style="
+    background:${color};color:#07090f;font-family:'Space Mono',monospace;
+    font-size:8px;font-weight:700;padding:3px 8px;border-radius:3px;
+    white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.5)
+  ">${label}</div>`,
+      iconAnchor: [0, 0],
+    });
+    L.marker(ROUTE[0], { icon: markerIcon('#00e676', 'Stop A') }).addTo(map);
+    L.marker(ROUTE[ROUTE.length - 1], { icon: markerIcon('#ae6ef5', 'Stop B') }).addTo(map);
+
+    // Geofence circles
+    ZONES.forEach(z => {
+      L.circle([z.lat, z.lon], {
+        radius: z.r, color: '#ae6ef5', weight: 1, opacity: .5,
+        fillColor: '#ae6ef5', fillOpacity: .06
+      }).addTo(map);
+    });
+
+    // Bus marker
+    const busIcon = L.divIcon({
+      className: '',
+      html: `<div style="
+    width:14px;height:14px;border-radius:50%;
+    background:#00d4ff;border:2px solid #fff;
+    box-shadow:0 0 12px rgba(0,212,255,.8);
+  "></div>`,
+      iconAnchor: [7, 7],
+    });
+    const busMarker = L.marker(ROUTE[0], { icon: busIcon, zIndexOffset: 1000 }).addTo(map);
+
+    // Trail polyline
+    const trail = L.polyline([], {
+      color: '#00d4ff', weight: 2, opacity: .7
+    }).addTo(map);
+
+    // ── Haversine (for JS geofence check) ────────────────────────
+    function hav(la1, lo1, la2, lo2) {
+      const R = 6371000,
+        p1 = la1 * Math.PI / 180, p2 = la2 * Math.PI / 180,
+        dp = (la2 - la1) * Math.PI / 180, dl = (lo2 - lo1) * Math.PI / 180;
+      const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // ── Apply state ───────────────────────────────────────────────
+    function applyState(d) {
+      // GPS
+      const gps = d.gps || {};
+      const lat = gps.lat ?? ROUTE[0][0], lon = gps.lon ?? ROUTE[0][1];
+      const spd = +(gps.speed_kmh ?? 0);
+      $('g-lat').textContent = lat.toFixed(6);
+      $('g-lon').textContent = lon.toFixed(6);
+      $('g-spd').textContent = spd.toFixed(1) + ' km/h';
+      $('g-hdop').textContent = gps.hdop ?? '—';
+      $('g-sats').textContent = gps.sats ?? '—';
+      $('g-zone').textContent = (gps.geofence && gps.geofence !== 'none') ? gps.geofence : '—';
+      $('h-spd').textContent = spd.toFixed(1) + ' km/h';
+
+      const gdb = $('g-dev');
+      gdb.textContent = gps.deviated ? 'DEVIATED' : 'ON ROUTE';
+      gdb.className = 'badge ' + (gps.deviated ? 'b-err' : 'b-ok');
+
+      // Map
+      busMarker.setLatLng([lat, lon]);
+      const tr = d.gps_trail || [];
+      if (tr.length > 1) trail.setLatLngs(tr.map(p => [p.lat, p.lon]));
+      $('map-chip').textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}  ·  ${spd.toFixed(1)} km/h`;
+
+      const mdb = $('map-dev-badge');
+      mdb.textContent = gps.deviated ? '● OFF ROUTE' : '● ON ROUTE';
+      mdb.style.color = gps.deviated ? 'var(--red)' : 'var(--green)';
+
+      // Deviation bar
+      const dev = d.deviation || {};
+      const dm = +(dev.dist_m ?? 0), dt = +(dev.threshold_m ?? 120);
+      $('d-dist').textContent = dm.toFixed(0) + ' m';
+      $('d-thr').textContent = dt.toFixed(0) + ' m';
+      const pct = Math.min(100, dm / dt * 100);
+      const dbar = $('d-bar');
+      dbar.style.width = pct + '%';
+      dbar.style.background = pct > 90 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--green)';
+      const dst = $('d-stat');
+      dst.textContent = dev.is_deviated ? 'OFF ROUTE' : 'CLEAR';
+      dst.className = 'badge ' + (dev.is_deviated ? 'b-err' : 'b-ok');
+
+      // IMU
+      const imu = d.imu || {};
+      const ax = +(imu.ax || 0), ay = +(imu.ay || 0), az = +(imu.az || 1);
+      const gx = +(imu.gx || 0), gy = +(imu.gy || 0), gz = +(imu.gz || 0);
+      $('i-ax').textContent = ax.toFixed(3);
+      $('i-ay').textContent = ay.toFixed(3);
+      $('i-az').textContent = az.toFixed(3);
+      $('i-gx').textContent = gx.toFixed(1);
+      $('i-gy').textContent = gy.toFixed(1);
+      $('i-gz').textContent = gz.toFixed(1);
+      const mag = Math.sqrt(ax * ax + ay * ay + az * az);
+      $('i-mag').textContent = mag.toFixed(3) + ' g';
+      $('i-mag').style.color = mag > 2.5 ? 'var(--red)' : mag > 1.8 ? 'var(--amber)' : 'var(--cyan)';
+      // colour cells on impact
+      ['i-ax', 'i-ay'].forEach(id => {
+        const v = Math.abs(+$(id).textContent);
+        $(id).style.color = v > 2.0 ? 'var(--red)' : v > 1.2 ? 'var(--amber)' : 'var(--text)';
+      });
+
+      // ML
+      const ml = d.ml || {};
+      const prob = +(ml.prob ?? ml.probability ?? 0);
+      $('ml-prob').textContent = prob.toFixed(4);
+      $('ml-prob').style.color = prob > .5 ? 'var(--red)' : prob > .15 ? 'var(--amber)' : 'var(--purple)';
+      $('ml-bar').style.width = (prob * 100) + '%';
+      $('ml-bar').style.background = prob > .5 ? 'var(--red)' : prob > .15 ? 'var(--amber)' : 'var(--green)';
+      $('h-ml').textContent = prob.toFixed(4);
+      $('h-ml').style.color = prob > .15 ? 'var(--red)' : 'var(--purple)';
+      $('ml-badge').textContent = ml.rash ? 'RASH!' : 'SAFE';
+      $('ml-badge').className = 'badge ' + (ml.rash ? 'b-err' : 'b-ml');
+      $('ml-meta').innerHTML =
+        `buf ${ml.buf ?? 0}/30 &nbsp;·&nbsp; model: ${ml.model_loaded
+          ? '<span style="color:var(--green)">loaded ✓</span>'
+          : '<span style="color:var(--amber)">not found</span>'}`;
+      $('map-ml-badge').textContent = `ML: ${ml.rash ? 'RASH!' : 'SAFE'}`;
+      $('map-ml-badge').style.color = ml.rash ? 'var(--red)' : 'var(--purple)';
+
+      // Alcohol
+      const alc = d.alcohol || {};
+      const alc_adc = +(alc.adc ?? alc.raw_adc ?? 0);
+      $('a-adc').textContent = alc_adc || '—';
+      const as = $('a-stat');
+      as.textContent = alc.alert ? 'DETECTED!' : 'CLEAR';
+      as.className = 'badge ' + (alc.alert ? 'b-err' : 'b-ok');
+      const alc_pct = Math.min(100, alc_adc / 4095 * 100);
+      $('a-bar').style.width = alc_pct + '%';
+      $('a-bar').style.background = alc.alert ? 'var(--red)' : alc_adc > 2000 ? 'var(--amber)' : 'var(--green)';
+
+      // Air quality
+      const air = d.air || d.env || {};
+      const air_adc = +(air.adc ?? air.air_quality ?? air.aq ?? 0);
+      $('e-aq').textContent = air_adc || '—';
+      const es = $('e-stat');
+      es.textContent = air.alert ? 'ALERT!' : 'CLEAR';
+      es.className = 'badge ' + (air.alert ? 'b-err' : 'b-ok');
+      const air_pct = Math.min(100, air_adc / 4095 * 100);
+      $('e-bar').style.width = air_pct + '%';
+      $('e-bar').style.background = air.alert ? 'var(--red)' : air_adc > 2500 ? 'var(--amber)' : 'var(--green)';
+
+      // Geofences
+      const geos = d.geofences || [];
+      if (geos.length) {
+        $('geo-list').innerHTML = geos.map(g => `
+      <div class="geo-row">
+        <div>
+          <span class="geo-name">${g.zone}</span>
+          <div class="geo-dist">${g.dist_m != null ? g.dist_m + ' m' : '—'}</div>
+        </div>
+        <span class="badge ${g.state === 'INSIDE' ? 'b-ok' : 'b-info'}">${g.state}</span>
+      </div>`).join('');
+      }
+
+      // Sensor health
+      const sh = d.sensor_health || {};
+      const SH = {
+        OK: 'var(--green)', ALERT: 'var(--red)', WAIT: 'var(--sub)',
+        STANDBY: 'var(--sub)', 'NO FIX': 'var(--amber)', ACTIVE: 'var(--green)'
+      };
+      [['gps', 'sh-gps'], ['imu', 'sh-imu'], ['alcohol', 'sh-alc'],
+      ['air', 'sh-air'], ['gsm', 'sh-gsm']].forEach(([k, id]) => {
+        const v = sh[k] || 'WAIT';
+        $(id).textContent = v;
+        $(id).style.color = SH[v] || 'var(--sub)';
+      });
+      const rows = d.db_rows ?? 0;
+      $('sh-db').textContent = rows > 0 ? 'ACTIVE' : 'READY';
+      $('sh-db').style.color = rows > 0 ? 'var(--green)' : 'var(--sub)';
+      $('h-db').textContent = rows.toLocaleString();
+
+      // Uptime
+      const up = d.uptime_s ?? 0;
+      $('h-up').textContent = pad(Math.floor(up / 60)) + ':' + pad(up % 60);
+
+      // Alerts
+      const alerts = d.alerts || [];
+      $('h-al').textContent = alerts.length;
+      $('al-cnt').textContent = alerts.length;
+      if (alerts.length) {
+        $('al-feed').innerHTML = alerts.map(a => `
+      <div class="al-item">
+        <div class="al-dot" style="background:${SEV[a.sev] || 'var(--sub)'}"></div>
+        <div style="flex:1;min-width:0">
+          <div class="al-type" style="color:${SEV[a.sev] || 'var(--sub)'}">${a.type}</div>
+          <div class="al-msg">${a.msg}</div>
+        </div>
+        <div class="al-time">${a.time}</div>
+      </div>`).join('');
+      }
+    }
+
+    function $(id) { return document.getElementById(id) }
+    function pad(n) { return String(n).padStart(2, '0') }
+
+    // ── WebSocket ─────────────────────────────────────────────────
+    let ws = null, wsLive = false;
+
+    function connectWS() {
+      ws = new WebSocket('ws://localhost:8765');
+      ws.onopen = () => {
+        wsLive = true;
+        const b = $('ws-badge');
+        b.textContent = '● LIVE'; b.className = 'ws-pill live';
+        stopDemo();
+      };
+      ws.onmessage = e => {
+        try { const m = JSON.parse(e.data); if (m.type === 'state') applyState(m.data) } catch { }
+      };
+      ws.onclose = () => {
+        wsLive = false;
+        const b = $('ws-badge');
+        b.textContent = '● DEMO'; b.className = 'ws-pill demo';
+        startDemo();
+        setTimeout(connectWS, 4000);
+      };
+      ws.onerror = () => ws.close();
+    }
+
+    // ── Demo simulation ───────────────────────────────────────────
+    let demoT = null, demoIdx = 0, demoAlerts = [], demoTrail = [],
+      demoML = 0.05, demoUp = 0, demoRows = 0;
+
+    function ts() {
+      return new Date().toLocaleTimeString('en-IN', { hour12: false });
+    }
+
+    function demoTick() {
+      const pt = ROUTE[demoIdx % ROUTE.length]; demoIdx++;
+      demoTrail.push({ lat: pt[0], lon: pt[1], ts: Date.now() / 1e3 });
+      if (demoTrail.length > 200) demoTrail.shift();
+      demoUp++; demoRows += 4;
+
+      const rash_ep = demoIdx % 60 < 8;
+      const imu = {
+        ax: (Math.random() - .5) * (rash_ep ? 3.2 : 0.7),
+        ay: (Math.random() - .5) * (rash_ep ? 3.2 : 0.7),
+        az: 1 + (Math.random() - .5) * .15,
+        gx: (Math.random() - .5) * (rash_ep ? 120 : 28),
+        gy: (Math.random() - .5) * (rash_ep ? 120 : 28),
+        gz: (Math.random() - .5) * (rash_ep ? 60 : 18),
+      };
+
+      // ML probability drift
+      const target = rash_ep ? 0.75 : 0.05;
+      demoML += (target - demoML) * 0.08 + (Math.random() - .5) * 0.03;
+      demoML = Math.max(0, Math.min(1, demoML));
+
+      const alc_adc = Math.floor(Math.random() * 2200);
+      const air_adc = Math.floor(Math.random() * 2800);
+      const spd = 10 + Math.random() * 22;
+
+      // Geofence check
+      const inA = hav(pt[0], pt[1], ZONES[0].lat, ZONES[0].lon) <= ZONES[0].r;
+      const inB = hav(pt[0], pt[1], ZONES[1].lat, ZONES[1].lon) <= ZONES[1].r;
+
+      // Deviation sim
+      const dev = Math.random() < .04;
+      const dm = dev ? 130 + Math.random() * 60 : Math.random() * 80;
+
+      // Occasional alerts
+      if (rash_ep && demoIdx % 8 === 0)
+        demoAlerts.unshift({
+          type: 'RASH_DRIVING', sev: 'HIGH',
+          msg: `Stacking ensemble prob=${demoML.toFixed(3)}`, time: ts()
+        });
+      if (alc_adc > 2500)
+        demoAlerts.unshift({
+          type: 'ALCOHOL', sev: 'CRITICAL',
+          msg: `MQ-3 ADC=${alc_adc}`, time: ts()
+        });
+      demoAlerts = demoAlerts.slice(0, 30);
+
+      applyState({
+        gps: {
+          lat: pt[0], lon: pt[1], speed_kmh: spd,
+          hdop: +(1.1 + Math.random() * .4).toFixed(2), sats: 8,
+          geofence: inA ? 'Stop_A' : inB ? 'Stop_B' : 'none', deviated: dev
+        },
+        imu,
+        alcohol: { adc: alc_adc, alert: alc_adc > 2500 },
+        air: { adc: air_adc, alert: air_adc > 3000 },
+        ml: { prob: demoML, probability: demoML, rash: demoML > .15, buf: 30, model_loaded: false },
+        deviation: { dist_m: +dm.toFixed(1), threshold_m: 120, is_deviated: dev },
+        geofences: [
+          {
+            zone: 'Stop_A', state: inA ? 'INSIDE' : 'OUTSIDE',
+            dist_m: +hav(pt[0], pt[1], ZONES[0].lat, ZONES[0].lon).toFixed(0)
+          },
+          {
+            zone: 'Stop_B', state: inB ? 'INSIDE' : 'OUTSIDE',
+            dist_m: +hav(pt[0], pt[1], ZONES[1].lat, ZONES[1].lon).toFixed(0)
+          },
+        ],
+        alerts: demoAlerts,
+        gps_trail: demoTrail,
+        sensor_health: {
+          gps: 'OK', imu: 'OK',
+          alcohol: alc_adc > 2500 ? 'ALERT' : 'OK',
+          air: air_adc > 3000 ? 'ALERT' : 'OK',
+          gsm: 'STANDBY'
+        },
+        db_rows: demoRows,
+        uptime_s: demoUp,
+        last_updated: ts(),
+      });
+    }
+
+    function startDemo() { if (demoT) return; demoTick(); demoT = setInterval(demoTick, 1000) }
+    function stopDemo() { clearInterval(demoT); demoT = null }
+
+    connectWS();
+    setTimeout(() => { if (!wsLive) startDemo() }, 1500);
+  </script>
+</body>
+
+</html>
